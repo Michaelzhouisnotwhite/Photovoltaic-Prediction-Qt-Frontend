@@ -1,0 +1,15 @@
+{
+    "configurations": [
+    
+        {
+            "name": "Launch qt main",
+            "type": "python",
+            "request": "launch",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}; ${workspaceFolder}/ui;"
+            },
+            "program": "${workspaceFolder}/main.py",
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

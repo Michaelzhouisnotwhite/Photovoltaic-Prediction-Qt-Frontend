@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="icon">
+    <file>icon/csv-64.png</file>
+    <file>icon/csv-red.ico</file>
+  </qresource>
+</RCC>
