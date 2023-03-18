@@ -12,6 +12,8 @@ import requests
 import os
 from utils.settings import __url__
 # from ui.ui_datasettings import Ui_DataSettingDlg
+from ui.ui_result_download_widget import Ui_ResultDownloadWidget
+from ui.ui_main_window import Ui_MainWindow
 from ui.ui_datasettings_dlg import Ui_DataSettingDlg
 __FILE_DIR__ = os.path.abspath(os.path.dirname(__file__))
 

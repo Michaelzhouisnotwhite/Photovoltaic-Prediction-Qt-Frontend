@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>717</width>
-    <height>408</height>
+    <width>713</width>
+    <height>436</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -15,8 +15,20 @@
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
+    <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
     <item>
-     <widget class="QWidget" name="widget" native="true"/>
+     <widget class="QWidget" name="BaseWidget" native="true"/>
     </item>
    </layout>
   </widget>
