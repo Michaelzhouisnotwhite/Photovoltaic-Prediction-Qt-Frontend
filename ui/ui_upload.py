@@ -18,7 +18,7 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
 from PySide6.QtWidgets import (QApplication, QFrame, QGridLayout, QHBoxLayout,
     QLabel, QProgressBar, QPushButton, QSizePolicy,
     QSpacerItem, QStackedWidget, QVBoxLayout, QWidget)
-from . import resource_rc
+import resource_rc
 
 class Ui_UploadMainWindow(object):
     def setupUi(self, UploadMainWindow):
@@ -176,7 +176,6 @@ class Ui_UploadMainWindow(object):
 
 
         self.retranslateUi(UploadMainWindow)
-        self.browseComputerBtn.clicked.connect(UploadMainWindow.browse_computer_btn_clicked)
         self.chooseFileBtn.clicked.connect(self.browseComputerBtn.click)
         self.uploadCsvBtn.clicked.connect(self.browseComputerBtn.click)
 

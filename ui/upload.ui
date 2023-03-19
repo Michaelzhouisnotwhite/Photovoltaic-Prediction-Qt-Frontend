@@ -407,22 +407,6 @@ font: 10pt &quot;Microsoft YaHei UI&quot;;}</string>
  </resources>
  <connections>
   <connection>
-   <sender>browseComputerBtn</sender>
-   <signal>clicked()</signal>
-   <receiver>UploadMainWindow</receiver>
-   <slot>browse_computer_btn_clicked()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>378</x>
-     <y>240</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>498</x>
-     <y>0</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
    <sender>chooseFileBtn</sender>
    <signal>clicked()</signal>
    <receiver>browseComputerBtn</receiver>

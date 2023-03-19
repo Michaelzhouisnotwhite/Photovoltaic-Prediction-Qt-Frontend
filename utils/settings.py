@@ -10,4 +10,11 @@ class __URL__:
         return f"{self}/upload-file/"
     upload_csv_progress = ""
     
+    def result_file_dir(self, namespace):
+        return f"{self}/list-dir/{namespace}"
+    
+    @classmethod
+    def start_train(cls, namespace):
+        return f"{cls}/start-train/{namespace}"
+    
 __url__ = __URL__()

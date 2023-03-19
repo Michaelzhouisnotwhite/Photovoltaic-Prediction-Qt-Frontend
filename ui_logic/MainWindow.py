@@ -1,164 +1,117 @@
 import json
+import os
 from typing import Optional
 
 import PySide6
-from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
-from ui.ui_upload import Ui_UploadMainWindow
-from PySide6.QtWidgets import QMainWindow, QApplication, QWidget, QLayout, QVBoxLayout, QFileDialog, QMessageBox, QDialog
-from PySide6.QtGui import QIcon
-from PySide6.QtCore import QThread, Signal, Slot
-from utils.dev import logger, logger_error
 import requests
-import os
-from utils.settings import __url__
-# from ui.ui_datasettings import Ui_DataSettingDlg
-from ui.ui_result_download_widget import Ui_ResultDownloadWidget
+from PySide6.QtCore import QSize, Qt, QThread, Signal, Slot, QModelIndex, QPersistentModelIndex
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import (QApplication, QDialog, QFileDialog, QLayout,
+                               QMainWindow, QMessageBox, QVBoxLayout, QWidget, QTreeWidget, QTreeWidgetItem, QHeaderView, QAbstractItemView)
+from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
+
 from ui.ui_main_window import Ui_MainWindow
-from ui.ui_datasettings_dlg import Ui_DataSettingDlg
-__FILE_DIR__ = os.path.abspath(os.path.dirname(__file__))
+from ui.ui_result_download_widget import Ui_ResultDownloadWidget
+from ui.ui_upload import Ui_UploadMainWindow
+from utils.dev import logger, logger_error
+from utils.settings import __url__
+
+from .DataSettingDlg import DataSettingDlg
+from .ui_thread import UploadDataSettingsThread, UploadThread, GetFileDirThread, StartTrainThread, FilesDownloadThread
+from . import __MODULE_DIR__
 
 
-class UploadThread(QThread):
-    upload_progress = Signal(int)
-    file_path: str = ""
-    thread_running = True
-    namespace = ""
-
-    class FilePathNotExits(RuntimeError):
-        message = ""
-
-        def __init__(self, message="") -> None:
-            self.message = message
-
-        def __str__(self) -> str:
-            return self.message
-
-    def __init__(self) -> None:
-        super().__init__()
-
-    def set_namespace(self, namespace: str):
-        self.namespace = namespace
-
-    def set_upload_file_path(self, file_path: str):
-        self.file_path = file_path
-        if not os.path.exists(self.file_path):
-            raise FileExistsError()
-
-    def exit(self, retcode: int = ...) -> None:
-        self.file_path = ""
-        return super().exit(retcode)
-
-    def quit(self) -> None:
-        self.file_path = ""
-        return super().quit()
-
-    def stop_thread(self):
-        self.file_path = ""
-        self.thread_running = False
-
-    def upload_monitor(self, upload_bytes: MultipartEncoderMonitor):
-        logger(f"bytes upload: {upload_bytes.bytes_read / os.path.getsize(self.file_path) * 100}")
-        self.upload_progress.emit(upload_bytes.bytes_read / os.path.getsize(self.file_path) * 100)
-
-    def run(self) -> None:
-        file_name = os.path.split(self.file_path)[-1]
-        data = MultipartEncoder(fields={
-            "file": (file_name, open(self.file_path, 'rb')),
-            "size": str(os.path.getsize(self.file_path)),
-            "namespace": self.namespace
-        })
-        data = MultipartEncoderMonitor(data, self.upload_monitor)
-        headers = {"Content-Type": data.content_type}
-        try:
-            req = requests.post(__url__.upload_csv, data=data, headers=headers)
-        except RuntimeError as e:
-            logger_error(e)
-            return
-        except requests.exceptions.MissingSchema as e:
-            logger_error(e)
-            return
-        logger(req.json())
-        if req.status_code != 200:
-            logger_error("upload file failed")
-            logger_error(req.json())
-            return
-
-
-class UploadDataSettingsThread(QThread):
-    train_seq_len: int = 96
-    predict_len: int = 10
-    upload_result = dict()
-    payload = dict()
-
-    def __init__(self, namespace="", train_seq_len=96, predict_len=10):
-        super().__init__()
-        self.payload = dict(namespace=namespace, train_seq_len=train_seq_len, predict_len=predict_len)
-
-    def run(self) -> None:
-        try:
-            req = requests.post(__url__.verify_data_settings, json=self.payload)
-        except RuntimeError as e:
-            logger_error(e)
-            return
-        except requests.exceptions.MissingSchema as e:
-            logger_error(e)
-            return
-        logger(req.json())
-        if req.status_code != 200:
-            logger_error("verify data settings failed")
-            logger_error(req.json())
-            return
-
-        self.upload_result = req.json()
-
-
-class DataSettingDlg(QDialog):
-    def __init__(self, parent: Optional[PySide6.QtWidgets.QWidget] = None) -> None:
-        super().__init__(parent)
-        self.data_settings_ui = Ui_DataSettingDlg()
-        self.data_settings_ui.setupUi(self)
-
-        self.data_settings_ui.okButton.clicked.connect(self.accept)
-        self.data_settings_ui.cancelButton.clicked.connect(self.reject)
-        self.namespace = None
-
-    def accept(self) -> None:
-        upload_data_settings_thread = UploadDataSettingsThread(
-            self.data_settings_ui.nameSpaceEdit.text(),
-            int(self.data_settings_ui.seqLenSpinBox.text()),
-            int(self.data_settings_ui.predictLenSpinBox.text())
-        )
-        upload_data_settings_thread.start()
-        upload_data_settings_thread.wait()
-
-        if upload_data_settings_thread.upload_result["code"] == 200:
-            self.namespace = upload_data_settings_thread.payload["namespace"]
-            return super().accept()
-
-        else:
-            msgbox = QMessageBox(self)
-            msgbox.setText(upload_data_settings_thread.upload_result["message"])
-            msgbox.setIcon(QMessageBox.Icon.Warning)
-            msgbox.setStandardButtons(QMessageBox.StandardButton.Ok)
-            msgbox.exec()
-            self.data_settings_ui.nameSpaceEdit.focusWidget()
-            self.data_settings_ui.nameSpaceEdit.selectAll()
-
-    def reject(self) -> None:
-        return super().reject()
-
-
-class MainWindow(QWidget):
+class MainWindow(QMainWindow):
 
     def __init__(self):
         super(MainWindow, self).__init__()
-        self.upload_ui = Ui_UploadMainWindow()
-        self.upload_ui.setupUi(self)
-        self.setWindowIcon(QIcon(os.path.join(__FILE_DIR__, "../ui/icon/upload-128.png")))
-        self.upload_ui.uploadStackedWidget.setCurrentIndex(0)
-        self.upload_thread = UploadThread()
+        # self.main_window = Ui_MainWindow()
+        # self.main_window.setupUi(self)
 
+        self.upload_widget_size = (574, 276)
+        self.download_widget_size = (672, 431)
+        self.upload_widget = Ui_UploadMainWindow()
+        self.upload_thread = UploadThread()
         self.data_settings_dlg = DataSettingDlg(self)
+        self.result_download_widget = Ui_ResultDownloadWidget()
+        self.get_file_dir_thread: GetFileDirThread = None
+
+        self.init_upload_widget()
+
+    def init_upload_widget(self):
+        temp_widget = QWidget(self)
+        self.upload_widget.setupUi(temp_widget)
+        self.setCentralWidget(temp_widget)
+        self.setWindowTitle(temp_widget.windowTitle())
+        self.setMaximumSize(temp_widget.maximumSize())
+        self.resize(*self.upload_widget_size)
+        self.upload_widget.uploadStackedWidget.setCurrentIndex(0)
+        # self.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, False)
+        self.upload_widget.browseComputerBtn.clicked.connect(self.browse_computer_btn_clicked)
+        self.setWindowIcon(QIcon(os.path.join(__MODULE_DIR__, "../ui/icon/upload-128.png")))
+
+    def init_download_widget(self):
+        temp_widget = QWidget(self)
+        self.resize(*self.download_widget_size)
+        self.result_download_widget.setupUi(temp_widget)
+        self.setCentralWidget(temp_widget)
+        self.result_download_widget.dirTreeWidget.setColumnCount(3)
+        self.result_download_widget.dirTreeWidget.setHeaderLabels([u"文件名 (File Name)", u"大小 (Size)", u"类型 (Type)"])
+        self.setWindowTitle(temp_widget.windowTitle())
+        self.setMaximumSize(16777215, 16777215)
+        # self.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, False)
+        self.setMinimumSize(0, 0)
+        self.setWindowIcon(QIcon(os.path.join(__MODULE_DIR__, "../ui/icon/download-128.png")))
+        self.result_download_widget.refreshBtn.clicked.connect(self.tree_view_refresh)
+        self.result_download_widget.dirTreeWidget.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
+        self.result_download_widget.dirTreeWidget.itemChanged.connect(self.dir_tree_item_changed)
+
+        self.tree_expanded_dict = dict()
+        self.result_download_widget.dirTreeWidget.itemExpanded.connect(self.tree_widget_item_expanded)
+        self.result_download_widget.dirTreeWidget.itemCollapsed.connect(self.tree_widget_item_collapsed)
+        self.result_download_widget.downloadBtn.clicked.connect(self.download_btn_clicked)
+
+    @Slot()
+    def download_btn_clicked(self):
+        ...
+
+    @Slot(QTreeWidgetItem)
+    def tree_widget_item_expanded(self, item: QTreeWidgetItem):
+        self.tree_expanded_dict[item.text(0)] = True
+
+    @Slot(QTreeWidgetItem)
+    def tree_widget_item_collapsed(self, item: QTreeWidgetItem):
+        self.result_download_widget.dirTreeWidget.expand_items_idx[item.text(0)] = False
+
+    @Slot(QTreeWidgetItem, int)
+    def dir_tree_item_changed(self, item: QTreeWidgetItem, item_id: int):
+        item_child_count = item.childCount()
+        if item_child_count:
+            if item.checkState(0) == Qt.CheckState.Checked:
+                for i in range(item_child_count):
+                    item.child(i).setCheckState(0, Qt.CheckState.Checked)
+
+            elif item.checkState(0) == Qt.CheckState.Unchecked:
+                for i in range(item_child_count):
+                    item.child(i).setCheckState(0, Qt.CheckState.Unchecked)
+        else:
+            item_parent = item.parent()
+            if not item_parent:
+                return
+
+            selected_child_count = 0
+            for i in range(item_parent.childCount()):
+                if item_parent.child(i).checkState(0) == Qt.CheckState.Checked:
+                    selected_child_count += 1
+
+            if selected_child_count == 0:
+                item_parent.setCheckState(0, Qt.CheckState.Unchecked)
+
+            elif item_parent.childCount() > selected_child_count > 0:
+                item_parent.setCheckState(0, Qt.CheckState.PartiallyChecked)
+
+            elif selected_child_count == item_parent.childCount():
+                item_parent.setCheckState(0, Qt.CheckState.Checked)
 
     def browse_computer_btn_clicked(self):
         logger("browse_computer_btm_clicked")
@@ -172,10 +125,10 @@ class MainWindow(QWidget):
             self.upload_thread.wait()
             self.upload_thread.upload_progress.disconnect()
 
-        self.upload_ui.fileUploadProgressBar.setValue(0)
+        self.upload_widget.fileUploadProgressBar.setValue(0)
         self.upload_thread = UploadThread()
         fileDlg = QFileDialog(self, u"打开要预测的数据集文件", filter="CSV文件 (*.csv)")
-        fileDlg.setWindowIcon(QIcon(os.path.join(__FILE_DIR__, "../ui/icon/csv-red.ico")))
+        fileDlg.setWindowIcon(QIcon(os.path.join(__MODULE_DIR__, "../ui/icon/csv-red.ico")))
         fileDlg.setFileMode(QFileDialog.FileMode.ExistingFile)
         fileDlg.setAcceptMode(QFileDialog.AcceptMode.AcceptOpen)
 
@@ -186,12 +139,12 @@ class MainWindow(QWidget):
 
             # 上传成功UI更新
             self.upload_thread.upload_progress.connect(self.refresh_progress_bar)
-            self.upload_ui.uploadStackedWidget.setCurrentIndex(1)
-            self.upload_ui.uploadCompleteLabel.setText("正在上传文件...")
-            self.upload_ui.browseComputerBtn.setText("重新上传文件")
-            self.upload_ui.browseComputerBtn.clicked.disconnect()
-            self.upload_ui.browseComputerBtn.clicked.connect(self.rebrowse_computer_btn_clicked)
-            self.upload_ui.fileNameLabel.setText(os.path.split(file_names[0])[-1])
+            self.upload_widget.uploadStackedWidget.setCurrentIndex(1)
+            self.upload_widget.uploadCompleteLabel.setText("正在上传文件...")
+            self.upload_widget.browseComputerBtn.setText("重新上传文件")
+            self.upload_widget.browseComputerBtn.clicked.disconnect()
+            self.upload_widget.browseComputerBtn.clicked.connect(self.rebrowse_computer_btn_clicked)
+            self.upload_widget.fileNameLabel.setText(os.path.split(file_names[0])[-1])
 
             # 上传线程
             self.upload_thread.start()
@@ -206,12 +159,59 @@ class MainWindow(QWidget):
             u"是否训练",
             buttons=QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
             parent=self)
+        msgbox.button(QMessageBox.StandardButton.Ok).setText(u"是")
+        msgbox.button(QMessageBox.StandardButton.Cancel).setText(u"否")
         ret = msgbox.exec()
-        if ret == QMessageBox.StandardButton.Save:
+        if ret == QMessageBox.StandardButton.Ok:
+            # TODO: 请求后端开始训练
+            self.init_download_widget()
             ...
         else:
             ...
         ...
+
+    @Slot()
+    def tree_view_refresh(self):
+        if isinstance(self.get_file_dir_thread, GetFileDirThread):
+            self.get_file_dir_thread.stop()
+            self.get_file_dir_thread.wait()
+        self.get_file_dir_thread = GetFileDirThread(self.data_settings_dlg.namespace)
+        self.get_file_dir_thread.start()
+        self.result_download_widget.dirTreeWidget.setDisabled(True)
+        self.result_download_widget.refreshBtn.setDisabled(True)
+        self.get_file_dir_thread.dir_view_trigger.connect(self.update_tree_view)
+
+    def update_tree_view(self, data):
+        self.result_download_widget.dirTreeWidget.setDisabled(False)
+        self.result_download_widget.refreshBtn.setDisabled(False)
+
+        items = []
+        if data["code"] != 200:
+            ...
+        for i, (result_type_name, result_type_values) in enumerate(data["data"].items()):
+            item = QTreeWidgetItem([result_type_name])
+            item.setCheckState(0, Qt.CheckState.Unchecked)
+
+            for file_name, file_size in result_type_values:
+                _, ext = os.path.splitext(file_name)
+                if file_size < 2**10:
+                    wi = QTreeWidgetItem([file_name, f"{(file_size):.2f}B", ext])
+                elif 2**10 <= file_size < 2**20:
+                    wi = QTreeWidgetItem([file_name, f"{(file_size / 2**10):.2f}KB", ext])
+                elif 2**20 <= file_size < 2**30:
+                    wi = QTreeWidgetItem([file_name, f"{(file_size / 2**20):.2f}MB", ext])
+                else:
+                    wi = QTreeWidgetItem([file_name, f"{(file_size / 2**30):.2f}GB", ext])
+                wi.setCheckState(0, Qt.CheckState.Unchecked)
+                item.addChild(wi)
+            items.append(item)
+
+        self.result_download_widget.dirTreeWidget.clear()
+        self.result_download_widget.dirTreeWidget.addTopLevelItems(items)
+        self.result_download_widget.dirTreeWidget.header().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self.result_download_widget.dirTreeWidget.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.result_download_widget.dirTreeWidget.expandAll()
+        self.tree_expanded_dict.clear()
 
     def rebrowse_computer_btn_clicked(self):
         msg_box = QMessageBox()
@@ -223,4 +223,4 @@ class MainWindow(QWidget):
 
     @Slot(int, name="refresh progress bar")
     def refresh_progress_bar(self, cur_progress: int):
-        self.upload_ui.fileUploadProgressBar.setValue(cur_progress)
+        self.upload_widget.fileUploadProgressBar.setValue(cur_progress)
