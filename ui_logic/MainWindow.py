@@ -7,7 +7,7 @@ import requests
 from PySide6.QtCore import QSize, Qt, QThread, Signal, Slot, QModelIndex, QPersistentModelIndex
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (QApplication, QDialog, QFileDialog, QLayout,
-                               QMainWindow, QMessageBox, QVBoxLayout, QWidget, QTreeWidget, QTreeWidgetItem, QHeaderView, QAbstractItemView)
+                               QMainWindow, QMessageBox, QVBoxLayout, QWidget, QTreeWidget, QTreeWidgetItem, QHeaderView, QAbstractItemView, QLabel, QTreeWidgetItemIterator)
 from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
 
 from ui.ui_main_window import Ui_MainWindow
@@ -19,6 +19,27 @@ from utils.settings import __url__
 from .DataSettingDlg import DataSettingDlg
 from .ui_thread import UploadDataSettingsThread, UploadThread, GetFileDirThread, StartTrainThread, FilesDownloadThread
 from . import __MODULE_DIR__
+
+
+class DynamicEllipsisThread(QThread):
+    target: QLabel = None
+
+    def __init__(self, target: QLabel, text: str = "", nums=3, parent: Optional[PySide6.QtCore.QObject] = None) -> None:
+        super().__init__(parent)
+        self.target = target
+        self.text = text
+        self.stop_flag = False
+        self.nums = nums
+
+    def stop(self):
+        self.stop_flag = True
+
+    def run(self) -> None:
+        times = 0
+        while not self.stop_flag:
+            self.target.setText(self.text + "." * times)
+            times = (times + 1) % (self.nums + 1)
+            self.msleep(250)
 
 
 class MainWindow(QMainWindow):
@@ -67,13 +88,31 @@ class MainWindow(QMainWindow):
         self.result_download_widget.dirTreeWidget.itemChanged.connect(self.dir_tree_item_changed)
 
         self.tree_expanded_dict = dict()
+        self.anime_download_label_thread = DynamicEllipsisThread(
+            self.result_download_widget.infoLabel,
+            self.result_download_widget.infoLabel.text(),
+        )
+        self.anime_download_label_thread.start()
         self.result_download_widget.dirTreeWidget.itemExpanded.connect(self.tree_widget_item_expanded)
         self.result_download_widget.dirTreeWidget.itemCollapsed.connect(self.tree_widget_item_collapsed)
         self.result_download_widget.downloadBtn.clicked.connect(self.download_btn_clicked)
 
     @Slot()
     def download_btn_clicked(self):
-        ...
+        relative_paths = []
+        for item in QTreeWidgetItemIterator(self.result_download_widget.dirTreeWidget,
+                                            QTreeWidgetItemIterator.IteratorFlag.Checked | QTreeWidgetItemIterator.IteratorFlag.HasChildren):
+            # TODO: 这里有bug 急修
+            item_child_count: int = item.value().childCount()
+            if item_child_count > 0:
+                folder_name = item.value().text(0)
+                for child_id in range(item_child_count):
+                    child_item: QTreeWidgetItem = item.value().child(child_id)
+                    if child_item.checkState(0) == Qt.CheckState.Checked:
+                        relative_paths.append(os.path.join(folder_name, child_item.text(0)))
+        if len(relative_paths):
+            fd_thread = FilesDownloadThread(self.data_settings_dlg.namespace, relative_paths)
+            fd_thread.start()
 
     @Slot(QTreeWidgetItem)
     def tree_widget_item_expanded(self, item: QTreeWidgetItem):
@@ -81,7 +120,7 @@ class MainWindow(QMainWindow):
 
     @Slot(QTreeWidgetItem)
     def tree_widget_item_collapsed(self, item: QTreeWidgetItem):
-        self.result_download_widget.dirTreeWidget.expand_items_idx[item.text(0)] = False
+        self.tree_expanded_dict[item.text(0)] = False
 
     @Slot(QTreeWidgetItem, int)
     def dir_tree_item_changed(self, item: QTreeWidgetItem, item_id: int):
@@ -182,12 +221,18 @@ class MainWindow(QMainWindow):
         self.get_file_dir_thread.dir_view_trigger.connect(self.update_tree_view)
 
     def update_tree_view(self, data):
+        if data["code"] != 200:
+            msg_box = QMessageBox(
+                QMessageBox.Icon.Critical,
+                "获取下载文件列表失败",
+                data["message"],
+                QMessageBox.StandardButton.Ok)
+            msg_box.button(QMessageBox.StandardButton.Ok).setText("确定")
+            msg_box.exec()
+            return
+        items = []
         self.result_download_widget.dirTreeWidget.setDisabled(False)
         self.result_download_widget.refreshBtn.setDisabled(False)
-
-        items = []
-        if data["code"] != 200:
-            ...
         for i, (result_type_name, result_type_values) in enumerate(data["data"].items()):
             item = QTreeWidgetItem([result_type_name])
             item.setCheckState(0, Qt.CheckState.Unchecked)

@@ -110,8 +110,9 @@ class Ui_DataSettingDlg(object):
         self.seqLenSpinBox.setStyleSheet(u"\n"
 "font: 500 15pt \"Microsoft YaHei UI\";")
         self.seqLenSpinBox.setButtonSymbols(QAbstractSpinBox.UpDownArrows)
-        self.seqLenSpinBox.setMinimum(2)
+        self.seqLenSpinBox.setMinimum(8)
         self.seqLenSpinBox.setMaximum(1000)
+        self.seqLenSpinBox.setSingleStep(8)
         self.seqLenSpinBox.setValue(96)
 
         self.formLayout.setWidget(1, QFormLayout.FieldRole, self.seqLenSpinBox)
@@ -128,8 +129,9 @@ class Ui_DataSettingDlg(object):
         self.predictLenSpinBox.setMaximumSize(QSize(60, 16777215))
         self.predictLenSpinBox.setStyleSheet(u"\n"
 "font: 500 15pt \"Microsoft YaHei UI\";")
-        self.predictLenSpinBox.setMinimum(1)
+        self.predictLenSpinBox.setMinimum(8)
         self.predictLenSpinBox.setMaximum(1000)
+        self.predictLenSpinBox.setSingleStep(8)
 
         self.formLayout.setWidget(2, QFormLayout.FieldRole, self.predictLenSpinBox)
 

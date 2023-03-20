@@ -37,6 +37,9 @@ class DataSettingDlg(QDialog):
         upload_data_settings_thread.start()
         upload_data_settings_thread.wait()
 
+        if "code" not in upload_data_settings_thread.upload_result.keys():
+            return self.reject()
+
         if upload_data_settings_thread.upload_result["code"] == 200:
             self.namespace = upload_data_settings_thread.payload["namespace"]
             return super().accept()

@@ -1,15 +1,15 @@
 import json
-from typing import Optional
+from typing import List, Optional
 
 import os
-from utils.settings import __url__
+from utils.settings import __url__, DEV_DOWNLOAD_DIR
 import PySide6
 from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
 from ui.ui_upload import Ui_UploadMainWindow
 from PySide6.QtWidgets import QMainWindow, QApplication, QWidget, QLayout, QVBoxLayout, QFileDialog, QMessageBox, QDialog
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import QThread, Signal, Slot, QSize, Qt
-
+import re
 from utils.dev import logger, logger_error
 import requests
 
@@ -140,18 +140,37 @@ class GetFileDirThread(QThread):
 
 
 class FilesDownloadThread(QThread):
-    namespace = ""
-    files = []
 
-    def __init__(self, namespace: str, files=None) -> None:
+    def __init__(self, namespace: str, files: List[str] = None, filepath=DEV_DOWNLOAD_DIR) -> None:
         super().__init__()
         if not files:
             self.files = []
         self.files = files
         self.namespace = namespace
+        self.filepath = filepath
 
     def run(self) -> None:
-        ...
+        try:
+            req = requests.post(
+                __url__.download_file,
+                json=dict(
+                    namespace=self.namespace,
+                    relative_paths=self.files
+                ),
+                stream=True)
+        except RuntimeError as e:
+            logger_error(e)
+            return
+        except requests.exceptions.MissingSchema as e:
+            logger_error(e)
+            return
+        if req.status_code != 200:
+            logger_error("download error")
+            return
+        download_filename = re.findall("filename=\"(.+)\"", req.headers["content-disposition"])[0]
+        with open(os.path.join(self.filepath, download_filename), "wb") as f:
+            for chunk in req.iter_content(chunk_size=1024):
+                f.write(chunk)
 
 
 class StartTrainThread(QThread):
